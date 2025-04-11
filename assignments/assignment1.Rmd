@@ -1,0 +1,49 @@
+---
+title: 'Graphical and Markov Models: Assignment 1'
+author: "Simon Schmetz"
+date: "2025-04-11"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Tasks
+
+1) Write a brief introduction to the data (where it comes from, what are the variables, etc.)
+
+2) Try to fit different types of graphical log linear models to the data and select the most appropriate model.  Draw the graphs of the models you fit and comment on whether the independencies in the data make sense. 
+
+3) Carry out a goodness of fit test to see whether the selected model fits the data.
+
+4) Write some brief conclusions of your analysis.
+
+# 1) Introduction
+
+```{r cars}
+data(HairEyeColor)
+head(HairEyeColor)
+```
+
+# 2) Fitting different types of graphical log linear models
+
+```{r}
+
+```
+
+
+# 3) Goodness of fit test
+
+```{r}
+
+```
+
+
+# 4) Conclusions
+
+```{r}
+
+```
+
+
