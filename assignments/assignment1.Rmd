@@ -9,6 +9,14 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+library(readr)
+library(dplyr)
+
+library(graph)
+library(gRim)
+```
+
 # Tasks
 
 1) Write a brief introduction to the data (where it comes from, what are the variables, etc.)
@@ -21,28 +29,255 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # 1) Introduction
 
+The dataset used in the following work on Graphical loglinear models is the "Lung Cancer" dataset (https://www.kaggle.com/datasets/uciml/breast-cancer-wisconsin-data) with a wide array of variables and the rows corresponding to patients with lung cancer. From this dataset, the following variables are selected for the analysis:
+
+Air Pollution: The level of air pollution exposure of the patient. (Categorical)
+Alcohol use: The level of alcohol use of the patient. (Categorical)
+Balanced Diet: The level of balanced diet of the patient. (Categorical)
+Obesity: The level of obesity of the patient. (Categorical)
+Smoking: The level of smoking of the patient. (Categorical)
+Shortness of Breath: The level of shortness of breath of the patient. (Categorical)
+
+These originally categorical variables with values 1:n are transformed in binary categorical with values corresponding to "high" and "low" with values <= 4 being low. A frequency column is then added and the dataset is used to create a contingency table. In these contingency tables we find many entries to be zero, corresponding to the dificulty to find a purely categorical dataset with even distribution across all variables. We however proceed with a lack of alternatives and keep this in mind when interpreting the results of models trained on this data.
+
 ```{r cars}
-data(HairEyeColor)
-head(HairEyeColor)
+# Load the data
+data <- read_csv("data/cancer.csv")
+
+data <- data %>%
+  rename_all(~ gsub(" ", "_", tolower(.)))
+
+data = data[c("alcohol_use", "balanced_diet", "obesity", "smoking", "shortness_of_breath", "air_pollution")]
+
+# transform categorical variables
+data <- data %>%
+  mutate(across(all_of(names(data)), ~ case_when(
+    . >= 5 ~ "high",
+    . <= 4 ~ "low",
+    TRUE ~ as.character(.)
+  )))
+
+# Add a frequency column and remove duplicate rows
+data <- data %>%
+  group_by(across(everything())) %>%
+  mutate(Freq = n()) %>%
+  ungroup()
+data <- data %>%
+  distinct(across(everything()), .keep_all = TRUE)
+
+# Generate Contingency table
+xtab_result <- xtabs(Freq ~ ., data = data)
+print(xtab_result)
 ```
+
+```{r}
+# Load the data
+data <- read_csv("data/student_feedback.csv")
+
+data <- data %>%
+  rename_all(~ gsub(" ", "_", tolower(.)))
+
+data = data[c("well_versed_with_the_subject", "solves_doubts_willingly", "explains_concepts_in_an_understandable_way", "structuring_of_the_course", "degree_of_difficulty_of_assignments", "use_of_presentations")]
+
+
+# transform categorical variables
+data <- data %>%
+  mutate(across(all_of(names(data)), ~ case_when(
+    . >= 6 ~ "high",
+    . <= 5 ~ "low",
+    TRUE ~ as.character(.)
+  )))
+
+# Add a frequency column and remove duplicate rows
+data <- data %>%
+  group_by(across(everything())) %>%
+  mutate(Freq = n()) %>%
+  ungroup()
+data <- data %>%
+  distinct(across(everything()), .keep_all = TRUE)
+
+# Generate Contingency table
+xtab_result <- xtabs(Freq ~ ., data = data)
+print(xtab_result)
+```
+
+
+With the dataset set up, we begin with performing a chi square test of independence for each pair of variables. The resulting p-Values show with the majority of p-Values equal to zero, that there might be problems with performing the test, possibly due to the many zero frequencies as discussed above. The only pair showing a non-zero p-Value is "shortness of breath x smoking" with a p-Value of 0.033, unsurprisingly rejecting independence. 
+
+```{r}
+### Chi square test of indip
+
+# get var pairs
+vars <- names(data)[names(data) != "Freq"]
+pairs <- combn(vars, 2, simplify = FALSE)
+
+# perform Chi-square test for each pair
+results <- lapply(pairs, function(pair) {
+  xtab <- xtabs(Freq ~ ., data = data[, c(pair, "Freq")])
+  test <- chisq.test(xtab)
+  list(
+    variables = pair,
+    p_value = test$p.value,
+    statistic = test$statistic,
+    df = test$parameter,
+    expected = test$expected
+  )
+})
+
+# Print
+for (res in results) {
+  cat("\n---\n")
+  cat("Variables:", paste(res$variables, collapse = " x "), " | p-value =", round(res$p_value, 3))
+}
+
+```
+
+
 
 # 2) Fitting different types of graphical log linear models
 
+With the initial set up of the data and the frequency table complete, we proceed with fitting different types of graphical log linear models to the data. We begin by defining a full model and a graphical model corresponding to expected dependence between the variables based on prior knowledge about the topic. The chi-squared test for independence unfortunately is unfit for aiding in this task as detailed above. We then proceed with automatic model selection using the BIC and AIC criteria to identify the best model.
+
+
 ```{r}
+# Define full model
+model_formular_full <- ~alcohol_use*balanced_diet*obesity*smoking*shortness_of_breath*air_pollution
+
+# Define reduced model
+model_formular_reduced  <- ~ alcohol_use * balanced_diet +
+               alcohol_use * obesity +
+               alcohol_use * smoking +
+               balanced_diet * obesity +
+               smoking * shortness_of_breath +
+               smoking * balanced_diet +
+               smoking * obesity +
+               air_pollution * shortness_of_breath
+```
+
+We begin by visualizing the dependence structure in the full model vs the reduced model and checking if they both indeed are graphical models.
+
+```{r}
+par(mfrow=c(1,2))
+
+# full model
+m_full <- dmod(model_formular_full, data=xtab_result)
+isGraphical(model_formular_full)
+plot(m_full)
+summary(m_full)
+ug_full <- ug(model_formular_full)
+rip(ug_full)
+
+# reduced model
+m_red <- dmod(model_formular_reduced, data=xtab_result)
+isGraphical(model_formular_reduced) #
+plot(m_red)
+summary(m_red)
+ug_red <- ug(model_formular_reduced)
+rip(ug_red)
+```
+
+
+We then evaluate AIC and BIC for both models.
+
+```{r}
+dmod(model_formular_full, data=xtab_result)
+dmod(model_formular_reduced, data=xtab_result)
 
 ```
+
+
+
+```{r}
+
+cc <- loglin(xtab_result,
+             list(c(1,2),
+                   c(1,3),
+                   c(1,4),
+                   c(2,3),
+                   c(4,2),
+                   c(4,3),
+                   c(4,5),
+                   c(6,5)),
+             fit = TRUE)
+
+cc <- loglin(xtab_result,
+             list(1:6),
+             fit = TRUE)
+
+```
+
+
+```{r}
+# AIC - restricted 
+par(mfrow=c(1,2))
+
+m_full_selection = dmod(~.^.,data=xtab_result)
+mbaic <- backward(m_full_selection)
+plot(mbaic)
+
+
+m_zero_selection = dmod(~.^1,data=xtab_result)
+mfaic <- forward(m_zero_selection)
+plot(mfaic)
+```
+
+
+```{r}
+# BIC - restricted 
+par(mfrow=c(1,2))
+
+m_full_selection = dmod(~.^.,data=xtab_result)
+mbaic <- backward(m_full_selection,k=log(sum(xtab_result)))
+plot(mbaic)
+
+
+m_zero_selection = dmod(~.^1,data=xtab_result)
+mfaic <- forward(m_zero_selection,k=log(sum(xtab_result)))
+plot(mfaic)
+```
+
+```{r}
+# AIC - unrestricted 
+par(mfrow=c(1,2))
+
+m_full_selection = dmod(~.^.,data=xtab_result)
+mbaic <- backward(m_full_selection,type="unrestricted")
+plot(mbaic)
+
+
+m_zero_selection = dmod(~.^1,data=xtab_result)
+mfaic <- forward(m_zero_selection,type="unrestricted")
+plot(mfaic)
+```
+
+
+```{r}
+# BIC - unrestricted 
+par(mfrow=c(1,2))
+
+m_full_selection = dmod(~.^.,data=xtab_result)
+mbaic <- backward(m_full_selection,type="unrestricted",k=log(sum(xtab_result)))
+plot(mbaic)
+
+
+m_zero_selection = dmod(~.^1,data=xtab_result)
+mfaic <- forward(m_zero_selection,type="unrestricted",k=log(sum(xtab_result)))
+plot(mfaic)
+```
+
 
 
 # 3) Goodness of fit test
 
 ```{r}
-
+pchisq(mbaic$fitinfo$dev,mbaic$fitinfo$dimension[4])
 ```
 
 
 # 4) Conclusions
 
 ```{r}
+
 
 ```
 
