@@ -1,7 +1,7 @@
 ---
 title: 'Graphical and Markov Models: Assignment 1'
 author: "Simon Schmetz"
-date: "2025-04-11"
+date: "2025-04-23"
 output: pdf_document
 ---
 
@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(readr)
 library(dplyr)
-
+library(knitr)
 library(graph)
 library(gRim)
 ```
@@ -274,23 +274,30 @@ best_bic_index <- which.min(model_seelction_results$BIC)
 best_aic <- model_seelction_results[best_aic_index, ]
 best_bic <- model_seelction_results[best_bic_index, ]
 
-# Print results
-cat("====================================\n")
-cat(" Best Model Based on AIC\n")
-cat("====================================\n")
-cat(sprintf("Model:           %s\n", best_aic$Model))
-cat(sprintf("AIC:             %.2f\n", best_aic$AIC))
-cat(sprintf("BIC:             %.2f\n", best_aic$BIC))
-cat(sprintf("Chi-Sq p-value:  %.4f\n", best_aic$Chi_Sq_pval))
+# Create a single text block
+output <- paste0(
+  "====================================\n",
+  " Best Model Based on AIC\n",
+  "====================================\n",
+  sprintf("Model:           %s\n", best_aic$Model),
+  sprintf("AIC:             %.2f\n", best_aic$AIC),
+  sprintf("BIC:             %.2f\n", best_aic$BIC),
+  sprintf("Chi-Sq p-value:  %.4f\n", best_aic$Chi_Sq_pval),
 
-cat("\n====================================\n")
-cat(" Best Model Based on BIC\n")
-cat("====================================\n")
-cat(sprintf("Model:           %s\n", best_bic$Model))
-cat(sprintf("AIC:             %.2f\n", best_bic$AIC))
-cat(sprintf("BIC:             %.2f\n", best_bic$BIC))
-cat(sprintf("Chi-Sq p-value:  %.4f\n", best_bic$Chi_Sq_pval))
+  "\n====================================\n",
+  " Best Model Based on BIC\n",
+  "====================================\n",
+  sprintf("Model:           %s\n", best_bic$Model),
+  sprintf("AIC:             %.2f\n", best_bic$AIC),
+  sprintf("BIC:             %.2f\n", best_bic$BIC),
+  sprintf("Chi-Sq p-value:  %.4f\n", best_bic$Chi_Sq_pval)
+)
 
+asis_output(paste0("```\n", output, "```"))
+```
+
+
+```{r,results='asis'}
 par(mfrow=c(1,2))
 plot(mbaic_unrestr)
 plot(mbbic)
