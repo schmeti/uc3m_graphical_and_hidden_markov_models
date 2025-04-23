@@ -215,7 +215,6 @@ m_full_selection = dmod(~.^.,data=xtab_result)
 mbaic <- backward(m_full_selection)
 plot(mbaic)
 
-
 m_zero_selection = dmod(~.^1,data=xtab_result)
 mfaic <- forward(m_zero_selection)
 plot(mfaic)
@@ -227,12 +226,12 @@ plot(mfaic)
 par(mfrow=c(1,2))
 
 m_full_selection = dmod(~.^.,data=xtab_result)
-mbaic <- backward(m_full_selection,k=log(sum(xtab_result)))
+mbbic <- backward(m_full_selection,k=log(sum(xtab_result)))
 plot(mbaic)
 
 
 m_zero_selection = dmod(~.^1,data=xtab_result)
-mfaic <- forward(m_zero_selection,k=log(sum(xtab_result)))
+mfbic <- forward(m_zero_selection,k=log(sum(xtab_result)))
 plot(mfaic)
 ```
 
@@ -241,12 +240,12 @@ plot(mfaic)
 par(mfrow=c(1,2))
 
 m_full_selection = dmod(~.^.,data=xtab_result)
-mbaic <- backward(m_full_selection,type="unrestricted")
+mbaic_unrestr <- backward(m_full_selection,type="unrestricted")
 plot(mbaic)
 
 
 m_zero_selection = dmod(~.^1,data=xtab_result)
-mfaic <- forward(m_zero_selection,type="unrestricted")
+mfaic_unrestr <- forward(m_zero_selection,type="unrestricted")
 plot(mfaic)
 ```
 
@@ -256,22 +255,89 @@ plot(mfaic)
 par(mfrow=c(1,2))
 
 m_full_selection = dmod(~.^.,data=xtab_result)
-mbaic <- backward(m_full_selection,type="unrestricted",k=log(sum(xtab_result)))
+mbbic_unrestr <- backward(m_full_selection,type="unrestricted",k=log(sum(xtab_result)))
 plot(mbaic)
 
 
 m_zero_selection = dmod(~.^1,data=xtab_result)
-mfaic <- forward(m_zero_selection,type="unrestricted",k=log(sum(xtab_result)))
+mfbic_unrestr <- forward(m_zero_selection,type="unrestricted",k=log(sum(xtab_result)))
 plot(mfaic)
 ```
-
-
-
-# 3) Goodness of fit test
+# 3) Model Selection and Goodness of fit test
 
 ```{r}
-pchisq(mbaic$fitinfo$dev,mbaic$fitinfo$dimension[4])
+# select bases on AIC/BIC
+
+#
+aic <- rep(NA,8)
+aic[1] <- mbaic$fitinfo$aic
+aic[2] <- mbaic_unrestr$fitinfo$aic
+aic[3] <- mfaic$fitinfo$aic
+aic[4] <- mfaic_unrestr$fitinfo$aic
+aic[5] <- mbbic$fitinfo$aic
+aic[6] <- mbbic_unrestr$fitinfo$aic
+aic[7] <- mfbic$fitinfo$aic
+aic[8] <- mfbic_unrestr$fitinfo$aic
+aic
+
+bic <- rep(NA,8)
+bic[1] <- mbaic$fitinfo$bic
+bic[2] <- mbaic_unrestr$fitinfo$bic
+bic[3] <- mfaic$fitinfo$bic
+bic[4] <- mfaic_unrestr$fitinfo$bic
+bic[5] <- mbbic$fitinfo$bic
+bic[6] <- mbbic_unrestr$fitinfo$bic
+bic[7] <- mfbic$fitinfo$bic
+bic[8] <- mfbic_unrestr$fitinfo$bic
+bic
+
+chisq_pval <- rep(NA,8)
+chisq_pval[1] <- pchisq(mbaic$fitinfo$dev,mbaic$fitinfo$dimension[4])
+chisq_pval[2] <- pchisq(mbaic_unrestr$fitinfo$dev,mbaic$fitinfo$dimension[4])
+chisq_pval[3] <- pchisq(mfaic$fitinfo$dev,mfaic$fitinfo$dimension[4])
+chisq_pval[4] <- pchisq(mfaic_unrestr$fitinfo$dev,mfaic$fitinfo$dimension[4])
+chisq_pval[5] <- pchisq(mbbic$fitinfo$dev,mbbic$fitinfo$dimension[4])
+chisq_pval[6] <- pchisq(mbbic_unrestr$fitinfo$dev,mbbic$fitinfo$dimension[4])
+chisq_pval[7] <- pchisq(mfbic$fitinfo$dev,mfbic$fitinfo$dimension[4]) 
+chisq_pval[8] <- pchisq(mfbic_unrestr$fitinfo$dev,mfbic$fitinfo$dimension[4])
+
+selection_type = c("mbaic","mbaic_unrestr","mfaic","mfaic_unrestr","mbbic","mbbic_unrestr","mfbic","mfbic_unrestr")
+
+model_seelction_results <- data.frame(
+  Model = selection_type,
+  AIC = aic,
+  BIC = bic,
+  Chi_Sq_pval = chisq_pval
+)
 ```
+
+```{r}
+# Best models
+best_aic_index <- which.min(model_seelction_results$AIC)
+best_bic_index <- which.min(model_seelction_results$BIC)
+
+best_aic <- model_seelction_results[best_aic_index, ]
+best_bic <- model_seelction_results[best_bic_index, ]
+
+# Print results
+cat("====================================\n")
+cat(" Best Model Based on AIC\n")
+cat("====================================\n")
+cat(sprintf("Model:           %s\n", best_aic$Model))
+cat(sprintf("AIC:             %.2f\n", best_aic$AIC))
+cat(sprintf("Chi-Sq p-value:  %.4f\n", best_aic$Chi_Sq_pval))
+
+cat("\n====================================\n")
+cat(" Best Model Based on BIC\n")
+cat("====================================\n")
+cat(sprintf("Model:           %s\n", best_bic$Model))
+cat(sprintf("BIC:             %.2f\n", best_bic$BIC))
+cat(sprintf("Chi-Sq p-value:  %.4f\n", best_bic$Chi_Sq_pval))
+
+```
+
+
+
 
 
 # 4) Conclusions
