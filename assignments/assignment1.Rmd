@@ -29,25 +29,40 @@ library(gRim)
 
 # 1) Introduction
 
+The dataset used in the following work on Graphical loglinear models is the "Student Alcohol Consumption" dataset (https://www.kaggle.com/datasets/uciml/student-alcohol-consumption?select=student-por.csv) with a wide array of variables and the rows corresponding to students behavior and background. From this dataset, the following variables are selected for the analysis from the Portuguese language course data:
 
+sex - student's sex (binary: 'F' - female or 'M' - male)
+traveltime - home to school travel time (numeric: 1 - <15 min., 2 - 15 to 30 min., 3 - 30 min. to 1 hour, or 4 - >1 hour)
+studytime - weekly study time (numeric: 1 - <2 hours, 2 - 2 to 5 hours, 3 - 5 to 10 hours, or 4 - >10 hours)
+failures - number of past class failures (numeric: n if 1<=n<3, else 4)
+schoolsup - extra educational support (binary: yes or no)
+health - current health status (numeric: from 1 - very bad to 5 - very good)
 
 These originally categorical variables with values 1:n are transformed in binary categorical with values corresponding to "high" and "low" with values <= 4 being low. A frequency column is then added and the dataset is used to create a contingency table. In these contingency tables we find many entries to be zero, corresponding to the dificulty to find a purely categorical dataset with even distribution across all variables. We however proceed with a lack of alternatives and keep this in mind when interpreting the results of models trained on this data.
 
 ```{r}
 # Load the data
-data <- read_csv("data/student_feedback.csv")
+data <- read_csv("data/student-por.csv")
+
+
 
 data <- data %>%
   rename_all(~ gsub(" ", "_", tolower(.)))
 
-data = data[c("well_versed_with_the_subject", "solves_doubts_willingly", "explains_concepts_in_an_understandable_way", "structuring_of_the_course", "degree_of_difficulty_of_assignments", "use_of_presentations")]
+data = data[c("traveltime", "studytime", "failures", "sex", "schoolsup", "health")]
+
+data <- data %>%
+  mutate(
+    sex = ifelse(sex == "F", 1, 0),         # 1 for Female, 0 for Male
+    schoolsup = ifelse(schoolsup == "yes", 1, 0)
+  )
 
 
 # transform categorical variables
 data <- data %>%
-  mutate(across(all_of(names(data)), ~ case_when(
-    . >= 6 ~ "high",
-    . <= 5 ~ "low",
+  mutate(across(all_of(c("traveltime","studytime","health","failures")), ~ case_when(
+    . >= 3 ~ "high",
+    . <= 2 ~ "low",
     TRUE ~ as.character(.)
   )))
 
@@ -64,7 +79,7 @@ xtab_result <- xtabs(Freq ~ ., data = data)
 print(xtab_result)
 ```
 
-With the dataset set up, we begin with performing a chi square test of independence for each pair of variables. The resulting p-Values show with the majority of p-Values equal to zero, that there might be problems with performing the test, possibly due to the many zero frequencies as discussed above. The only pair showing a non-zero p-Value is "shortness of breath x smoking" with a p-Value of 0.033, unsurprisingly rejecting independence. 
+With the dataset set up, we begin with performing a chi square test of independence for each pair of variables. The resulting p-Values show some cases with the p-Values equal to zero or one, indicating there might be problems with performing the test, possibly due to the many zero frequencies as discussed above. We further observe some expected dependences like sex and school support, and some somewhat surprising indipendences like study time and failures for a significance level .05. 
 
 ```{r}
 ### Chi square test of indip
@@ -98,14 +113,19 @@ for (res in results) {
 
 # 2) Fitting different types of graphical log linear models
 
-With the initial set up of the data and the frequency table complete, we proceed with fitting different types of graphical log linear models to the data. We begin by defining a full model and a graphical model corresponding to expected dependence between the variables based on prior knowledge about the topic. The chi-squared test for independence unfortunately is unfit for aiding in this task as detailed above. We then proceed with automatic model selection using the BIC and AIC criteria to identify the best model.
+With the initial set up of the data and the frequency table complete, we proceed with fitting different types of graphical log linear models to the data. We begin by defining a full model and a graphical model corresponding to the dependences of variables as shown by the chi-squared test with significance level .005.
 
 ```{r}
 # Define full model
-model_formular_full <- ~well_versed_with_the_subject*solves_doubts_willingly*explains_concepts_in_an_understandable_way*structuring_of_the_course*degree_of_difficulty_of_assignments*use_of_presentations
+model_formular_full <- ~traveltime*studytime*failures*sex*schoolsup*health
 
 # Define reduced model
-model_formular_reduced  <- ~ well_versed_with_the_subject * balanced_diet +
+model_formular_reduced  <- ~ traveltime*studytime+
+  studytime*sex+
+  studytime*schoolsup+
+  sex*schoolsup+
+  sex*health
+  
 
 ```
 
@@ -131,36 +151,14 @@ ug_red <- ug(model_formular_reduced)
 rip(ug_red)
 ```
 
-
-We then evaluate AIC and BIC for both models.
+We then evaluate AIC and BIC for both models and find the reduced model to shot better (lower) AIC/BIC
 
 ```{r}
 dmod(model_formular_full, data=xtab_result)
 dmod(model_formular_reduced, data=xtab_result)
-
 ```
 
-
-
-```{r}
-
-cc <- loglin(xtab_result,
-             list(c(1,2),
-                   c(1,3),
-                   c(1,4),
-                   c(2,3),
-                   c(4,2),
-                   c(4,3),
-                   c(4,5),
-                   c(6,5)),
-             fit = TRUE)
-
-cc <- loglin(xtab_result,
-             list(1:6),
-             fit = TRUE)
-
-```
-
+We then perform forward/backwards selection both restricted and unrestricted to find the optimal model. Overall, we find forward/backwards selection to yield the same results except for AIC-unrestricted, but different Results between AIC and BIC based selection. The results optained for restricted/unrestricted appear to be the same with the exception of backwards AIC unrestricted. Overall, travel time is shown to be indipendent  in all the resulting models, which is somewhat surprising as the chi-square test showed dependence between travel time and study time. Likewise, some models show the failure variable to be indipendent, also somewhat counter intuitive but in line with the chi-squared test results.
 
 ```{r}
 # AIC - restricted 
@@ -173,52 +171,50 @@ plot(mbaic)
 m_zero_selection = dmod(~.^1,data=xtab_result)
 mfaic <- forward(m_zero_selection)
 plot(mfaic)
-```
 
 
-```{r}
-# BIC - restricted 
-par(mfrow=c(1,2))
-
-m_full_selection = dmod(~.^.,data=xtab_result)
-mbbic <- backward(m_full_selection,k=log(sum(xtab_result)))
-plot(mbaic)
-
-
-m_zero_selection = dmod(~.^1,data=xtab_result)
-mfbic <- forward(m_zero_selection,k=log(sum(xtab_result)))
-plot(mfaic)
-```
-
-```{r}
 # AIC - unrestricted 
 par(mfrow=c(1,2))
 
 m_full_selection = dmod(~.^.,data=xtab_result)
 mbaic_unrestr <- backward(m_full_selection,type="unrestricted")
-plot(mbaic)
+plot(mbaic_unrestr)
 
 
 m_zero_selection = dmod(~.^1,data=xtab_result)
 mfaic_unrestr <- forward(m_zero_selection,type="unrestricted")
-plot(mfaic)
-```
+plot(mfaic_unrestr)
 
 
-```{r}
+# BIC - restricted 
+par(mfrow=c(1,2))
+
+m_full_selection = dmod(~.^.,data=xtab_result)
+mbbic <- backward(m_full_selection,k=log(sum(xtab_result)))
+plot(mbbic)
+
+
+m_zero_selection = dmod(~.^1,data=xtab_result)
+mfbic <- forward(m_zero_selection,k=log(sum(xtab_result)))
+plot(mfbic)
+
 # BIC - unrestricted 
 par(mfrow=c(1,2))
 
 m_full_selection = dmod(~.^.,data=xtab_result)
 mbbic_unrestr <- backward(m_full_selection,type="unrestricted",k=log(sum(xtab_result)))
-plot(mbaic)
+plot(mbbic_unrestr)
 
 
 m_zero_selection = dmod(~.^1,data=xtab_result)
 mfbic_unrestr <- forward(m_zero_selection,type="unrestricted",k=log(sum(xtab_result)))
-plot(mfaic)
+plot(mfbic_unrestr)
 ```
+
+
 # 3) Model Selection and Goodness of fit test
+
+With the Models trained, the resulting models are compared based on AIC/BIC and the chi-squared test. The results show that the unrestricted models have a equal or better fit than the restricted models, while the differences are small. The AIC and BIC values are close to each other, indicating that the models are similar in terms of fit. The chi-squared test shows that all models selected via BIC fit the data well, with p-values greater than 0.05 while AIC selection based models barely not passing the threshhold. Overall, the key for the significant increase in goodness of fit for the BIC based models appears to be identifying the independence of the variable failures.
 
 ```{r}
 # select bases on AIC/BIC
@@ -233,7 +229,7 @@ aic[5] <- mbbic$fitinfo$aic
 aic[6] <- mbbic_unrestr$fitinfo$aic
 aic[7] <- mfbic$fitinfo$aic
 aic[8] <- mfbic_unrestr$fitinfo$aic
-aic
+
 
 bic <- rep(NA,8)
 bic[1] <- mbaic$fitinfo$bic
@@ -244,7 +240,7 @@ bic[5] <- mbbic$fitinfo$bic
 bic[6] <- mbbic_unrestr$fitinfo$bic
 bic[7] <- mfbic$fitinfo$bic
 bic[8] <- mfbic_unrestr$fitinfo$bic
-bic
+
 
 chisq_pval <- rep(NA,8)
 chisq_pval[1] <- pchisq(mbaic$fitinfo$dev,mbaic$fitinfo$dimension[4])
@@ -264,7 +260,11 @@ model_seelction_results <- data.frame(
   BIC = bic,
   Chi_Sq_pval = chisq_pval
 )
+
+model_seelction_results
 ```
+
+Choosing a model with all BIC selection based models identical and the best AIC best model as mbaic_unrestr, but with the BIC models showing significantly better goodness of fit results while only marginal increase in AIC, the BIC models are heavily favoured in the choice of the model. 
 
 ```{r}
 # Best models
@@ -280,26 +280,25 @@ cat(" Best Model Based on AIC\n")
 cat("====================================\n")
 cat(sprintf("Model:           %s\n", best_aic$Model))
 cat(sprintf("AIC:             %.2f\n", best_aic$AIC))
+cat(sprintf("BIC:             %.2f\n", best_aic$BIC))
 cat(sprintf("Chi-Sq p-value:  %.4f\n", best_aic$Chi_Sq_pval))
 
 cat("\n====================================\n")
 cat(" Best Model Based on BIC\n")
 cat("====================================\n")
 cat(sprintf("Model:           %s\n", best_bic$Model))
+cat(sprintf("AIC:             %.2f\n", best_bic$AIC))
 cat(sprintf("BIC:             %.2f\n", best_bic$BIC))
 cat(sprintf("Chi-Sq p-value:  %.4f\n", best_bic$Chi_Sq_pval))
 
+par(mfrow=c(1,2))
+plot(mbaic_unrestr)
+plot(mbbic)
+
 ```
-
-
-
-
 
 # 4) Conclusions
 
-```{r}
-
-
-```
+For prediction tasks, the BIC based models are preferred as for good AIC, BIC and goodness-of-fit test results. However, when obtaining results from these models, the zero values in the initial frequency tables have to be taken into account. Bearing that in might, the models appear to represent the available data well.
 
 
