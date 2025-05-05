@@ -1,0 +1,73 @@
+---
+title: "Graphical Models - Assignment 2"
+author: "Silvana Luque, Simon Schmetz"
+date: "2025-05-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(readr)
+library(dplyr)
+library(knitr)
+library(graph)
+library(gRim)
+```
+
+# Taks
+
+a) Provide a brief introduction to the data set
+
+b) Try to define a possible network structure and give a brief explanation as to why this structure could make sense.  Include a graph of the proposed model.
+
+c) Fit the model and use it to make an out of sample prediction (like what we did in class to predict the probability a patient, who smokes and has not been to China, has tuberculosis ).
+
+d) Try to fit the graph structure of the model using one or more of the different approaches we saw in class.  Do the fits make sense?  If not you could use whitelists or blacklists to make certain links impossible.
+
+e) Which of the proposed graphical structures is the best?
+
+e) Provide a brief summary of your results. 
+
+# Introduction
+
+
+```{r cars}
+# Load Data
+data <- read_csv("data/wlinj_dryad.csv")
+data
+
+```
+# Manual Model Design
+
+
+## Design Graph 
+```{r}
+
+```
+
+## Fit Model and predict out of Sample 
+
+```{r}
+
+```
+
+# Automatic Graph Design
+
+```{r}
+
+```
+
+# Compare Graphs 
+
+```{r}
+
+```
+
+# Summary and Conclusions
+
+
+
