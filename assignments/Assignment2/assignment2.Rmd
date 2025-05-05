@@ -10,12 +10,15 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 library(readr)
 library(dplyr)
 library(knitr)
 library(graph)
 library(gRim)
+library(gRain)
+library(bnlearn)
+library(Rgraphviz)
 ```
 
 # Taks
@@ -32,42 +35,120 @@ e) Which of the proposed graphical structures is the best?
 
 e) Provide a brief summary of your results. 
 
-# Introduction
+# a) Introduction
+The following work on Bayesian Network was done as part of the Master in Statistics for Data Science at the Universidad Carlos III de Madrid and contains the design of a Graphical Bayesian Network model. The analysis was performed using the dataset titled "Weightlifting Injuries in Master Athletes" (https://zenodo.org/records/6679575), which comprises survey responses from 976 master weightlifters (aged 35–88, 51.1% female) across Australia, Canada, Europe, and the USA. Collected in June 2021, the data includes information on acute weightlifting-related injuries, chronic diseases, training practices, and sport history. Out a range of available variables, the following variables were extracted in the preprocessing of the data and then used for anaylsis: 
 
+- sex: sex of participant (m/f)
+- agegrp3: age group of participant (35-49, 50-59, 60+)
+- yrs_experience: years of experience in weightlifting (much = >2 years, little = <2 years)
+- injury: sustained injuries in past (1/0) in any of the categories "shoulder", "knees", "back", "hips"
+- train_warm: warm up before training in minutes (1/2+)
+- coached: coached by a professional (1/0), either in person or online
+
+the work begins with loading the data and some initial preprocessing. Then, graphical models are designed and fitted, first manually based on made assumptions and then based on design algorithms. The results are compared and a summary of the findings is provided.
 
 ```{r cars}
-# Load Data
+### Data Preprocessing
+## Load Data
 data <- read_csv("data/wlinj_dryad.csv")
-data
 
+
+## transform data
+
+# aggregate yrs_experience
+data <- data %>%
+  mutate(across(all_of(c("yrs_experience")), ~ case_when(
+    . <= 2 ~ "little",
+    TRUE ~ "much"
+  )))
+
+# aggregate train_warm
+data <- data %>%
+  mutate(across(all_of(c("train_warm")), ~ case_when(
+    . <= 1 ~ "1",
+    TRUE ~ "2+"
+  )))
+
+# aggregate coached
+data <- data %>%
+  mutate(coached = if_else(pcoach == 1 | premote == 1, 1, 0))
+
+# aggregate injury
+data <- data %>%
+  mutate(injury = if_else(shoulder == 1 | knees == 1 | back == 1 | hips == 1, 1, 0))
+
+# select vars
+data = data[c("sex", "agegrp3", "yrs_experience", "injury","train_warm","coached")]
+
+# turn vars into factors
+data <- data %>%
+  mutate(across(everything(), as.factor))
+
+# make sure data is a dataframe
+data <- as.data.frame(data) # important dont know why but R is dogshiiiiiiiiit so I spend 20 min to find this
+
+#print data
+head(data)
 ```
-# Manual Model Design
+# b&c) Manual Model Design
 
+The following section contains the manual design of a graphical model, which is then fitted to the data and used to make predictions.
 
-## Design Graph 
+## b) Design Graph (Manually)
+
+We begin by designing a graphical model based on what variables we asssume to be dependent. We begin by assuming that:
+
+- __yrs_experience__ is dependent on sex, as weight lifting appears to have started as a male dominated sport
+- __train_warm__ is dependent on yrs_experience, sex and agegrp3, as we assume that wiser are more likely to warm up before training and we expect that age, experience and not being male makes people wiser
+- __coached__ is dependent on agegrp3 and sex as we assume that older people prefer to do sport in groups and males to prefer to do sport alone
+- __injury__ is dependent on coached and train_warm, as we assume that people who are coached and/or properly warmed up are less likely to get injured, as well as dependent on sex as we expect men to tend to train more excessively than women
+
+These assumptions yield the following model: 
+
+```{r}
+dag <- model2network("[sex][agegrp3][yrs_experience|sex][train_warm|sex:yrs_experience:agegrp3][coached|sex:agegrp3][injury|train_warm:sex:coached]")
+graphviz.plot(dag)
+```
+
+## c) Fit Model and predict out of Sample 
+
+Next, we fit the model using the data and print out the probablity tables of the resulting model.
+
+```{r}
+
+# Using maximum likelihood.
+model_fit = bn.fit(dag,data,method = "bayes")
+model_fit
+```
+
+We then find a combination of variables that doesn't exist in our data
+```{r}
+
+# find out of sample combination
+all_combinations <- expand.grid(lapply(data, levels))
+missing_combinations <- anti_join(all_combinations, data, by = names(data))
+missing_combinations[1,]
+```
+and use that combination to perform a out of sample prediction for injury, yielding the following probability: 
+```{r}
+
+# predict 
+cpquery(model_fit, (injury=="0"), (sex=="f" & agegrp3=="60+" & yrs_experience=="little" & train_warm  =="1"),n=1000000)
+```
+
+# d) Automatic Graph Design
+
 ```{r}
 
 ```
 
-## Fit Model and predict out of Sample 
+# e) Compare Graphs 
 
 ```{r}
 
 ```
 
-# Automatic Graph Design
-
-```{r}
-
-```
-
-# Compare Graphs 
-
-```{r}
-
-```
-
-# Summary and Conclusions
+# f) Summary and Conclusions
 
 
 
