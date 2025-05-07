@@ -1,6 +1,6 @@
 ---
 title: "Graphical Models - Assignment 2"
-author: "Silvana Luque, Simon Schmetz"
+author: "Silvana Alvarez Luque, Simon Schmetz"
 date: "2025-05-05"
 output: pdf_document
 ---
@@ -96,7 +96,7 @@ The following section contains the manual design of a graphical model, which is 
 
 ## b) Design Graph (Manually)
 
-We begin by designing a graphical model based on what variables we asssume to be dependent. We begin by assuming that:
+We begin by designing a graphical model based on what variables we assume to be dependent. We begin by assuming that:
 
 - __yrs_experience__ is dependent on sex, as weight lifting appears to have started as a male dominated sport
 - __train_warm__ is dependent on yrs_experience, sex and agegrp3, as we assume that wiser are more likely to warm up before training and we expect that age, experience and not being male makes people wiser
@@ -112,7 +112,7 @@ graphviz.plot(dag)
 
 ## c) Fit Model and predict out of Sample 
 
-Next, we fit the model using the data and print out the probablity tables of the resulting model.
+Next, we fit the model using the data and print out the probability tables of the resulting model.
 
 ```{r}
 
@@ -122,30 +122,142 @@ model_fit
 ```
 
 We then find a combination of variables that doesn't exist in our data
-```{r}
 
+```{r}
 # find out of sample combination
 all_combinations <- expand.grid(lapply(data, levels))
 missing_combinations <- anti_join(all_combinations, data, by = names(data))
 missing_combinations[1,]
-```
-and use that combination to perform a out of sample prediction for injury, yielding the following probability: 
-```{r}
 
+# Why a combination? there are 18 out of the 96 possibles
+```
+
+and use that combination to perform a out of sample prediction for injury, yielding the following probability: 
+
+```{r}
 # predict 
-cpquery(model_fit, (injury=="0"), (sex=="f" & agegrp3=="60+" & yrs_experience=="little" & train_warm  =="1"),n=1000000)
+cpquery(model_fit, (injury=="0"), (sex=="f" & agegrp3=="60+" & yrs_experience=="little" & train_warm  =="1"),n=1000000) # I am not sure what we are predicting, like that is the probability of what(?)
 ```
 
 # d) Automatic Graph Design
 
+## Scored Based Method
+
+- __yrs_experience__ is dependent on sex, as weight lifting appears to have started as a male dominated sport (same as we expected).
+
+- __injury__  apparently is dependent only on sex, this result is unexpected as we saw that other of the present variables can be related with having a injury.
+
+- __coached__ is dependent on sex, the theory of males to prefer to do sport alone may be right.
+
+- __agegrp3__ depends on coaching. This relation should not be in the model, because it does not make sense that the age change or not depending on how the person train.
+
+- __train_warm__ is dependent on coached, that can be clear to see that in a coached training a train warm usually is present.
+
+
 ```{r}
+scoredag<-hc(data)
+scoredag
+plot(scoredag)
+
+# [sex][yrs_experience|sex][injury|sex][coached|sex][agegrp3|coached][train_warm|coached] 
+# INITIAL IDEA:
+# [sex][agegrp3][yrs_experience|sex][train_warm|sex:yrs_experience:agegrp3][coached|sex:agegrp3][injury|train_warm:sex:coached]
+```
+
+In general, as age and sex are characteristics proper of the weightlifters, it makes no sense that any of this two variables depend on any of the other nodes. For that reason a blacklist is created. Also, train warm is known to be really important to avoid injuries, that is why a white list is created with this relation.
+
+- **Blacklist:**
+
+| From      | To            |
+|-----------|---------------|
+| coached   | agegrp3, sex  |
+| injury    | sex           |
+| sex       | agegrp3       |
+| agegrp3   | sex           |
+
+- **Whitelist:**
+
+| From       | To         |
+|------------|------------|
+| train_warm | injury     |
+
+With this changes we obtain the following results:
+
+- __yrs_experience__ is dependent on sex (same as before)
+
+- __coached__ is dependent on agegrp3 and sex, that is closer with what we assume at the beginning (older people prefer to do sport in groups and males prefer to do sport alone).
+
+- __train_warm__ is dependent on being coached, and indirectly, in the sex and age. That means that our initial thoughts have sense, but only passing through being coached, not because train warm depends on this two variables variables directly.
+
+- __injury__ is dependent on sex, but now also on train warm (as it is in the white list). This makes a more clear an logical relation of getting a injury as we obtain the relation
+
+$$
+age \rightarrow coached \rightarrow warm \rightarrow injury
+$$
+
+```{r}
+blacklist <- data.frame(from = c("coached", "coached", "injury", "sex", "agegrp3"),
+                        to = c("agegrp3", "sex", "sex", "agegrp3", "sex"), stringsAsFactors = FALSE)
+
+whitelist <- data.frame(from = "train_warm", to = "injury", stringsAsFactors = FALSE)
+
+scoredag2 <- hc(data, blacklist = blacklist, whitelist = whitelist)
+plot(scoredag2)
+scoredag2
+
+# [sex][agegrp3][yrs_experience|sex][coached|sex:agegrp3][train_warm|coached][injury|sex:train_warm] 
 
 ```
 
+## Hybrid Methods
+
+First, we are going to make the graph structure without any restriction, and afterwards, we are going to take into consideration the white and black lists described before.
+
+With this method we obtain only 3 relations between the 6 possible variables, and one of them is again counter intuitive ($coached \rightarrow agegrp3$). 
+
+```{r}
+hybriddag<-mmhc(data)
+hybriddag
+plot(hybriddag)
+
+# [sex][yrs_experience][train_warm][injury|sex][coached|sex][agegrp3|coached] 
+# [sex][agegrp3][yrs_experience|sex][train_warm|sex:yrs_experience:agegrp3][coached|sex:agegrp3][injury|train_warm:sex:coached]
+```
+
+We include the same white and black lists that we use in the previous method. With this changes we obtain again a small number of relations:
+
+- __coached__ is dependent on agegrp3 and sex, that is closer with what we assume at the beginning (older people prefer to do sport in groups and males to prefer to do sport alone).
+
+- __injury__ is dependent on sex, but now also on train warm (as it is in the white list). 
+
+Nothing else is connected. 
+
+
+```{r}
+hybriddag2 <- mmhc(data, whitelist = whitelist, blacklist = blacklist)
+hybriddag2
+plot(hybriddag2)
+
+# hybriddag2$learning
+# hybriddag2$nodes
+# hybriddag2$arcs
+```
+
+
 # e) Compare Graphs 
+
+The model with smaller BIC and better coherence is the score-based algorithm with restrictions.
 
 ```{r}
 
+results <- data.frame(
+  Model = c("Proposed", "Score", "Hybrid"),
+  BIC = c(score(dag, data = data, type = "bic"),
+          score(scoredag2, data = data, type = "bic"),
+          score(hybriddag2, data = data, type = "bic"))
+)
+
+results
 ```
 
 # f) Summary and Conclusions
