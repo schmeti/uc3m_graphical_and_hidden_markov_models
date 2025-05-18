@@ -1,0 +1,224 @@
+---
+title: "Markov Hidden Model"
+author: "Silvana Alvarez"
+date: "2025-05-17"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r warning=FALSE, message=FALSE}
+if (!require(depmixS4)) install.packages("depmixS4")
+if (!require(R2OpenBUGS)) install.packages("R2OpenBUGS")
+
+library(depmixS4)
+library(ggplot2)
+library(dplyr)
+library(R2OpenBUGS)
+
+df <- read.csv("seattle-weather.csv") 
+```
+
+# Data Description
+
+https://www.kaggle.com/datasets/ananthr1/weather-prediction?resource=download
+
+```{r}
+# Create additional features 
+df$temp_range <- df$temp_max - df$temp_min
+
+# Convert date column to Date type
+df$date <- as.Date(df$date)
+
+# Scale continuous variables 
+df$temp_max <- scale(df$temp_max)
+df$temp_min <- scale(df$temp_min)
+df$wind     <- scale(df$wind)
+df$precipitation <- scale(df$precipitation)
+df$temp_range <- scale(df$temp_range)
+```
+
+# Introduction
+
+# Frequentist Approach
+
+Estimates parameters by maximizing the likelihood, using the EM algorithm or direct optimization. In this case, the transition matrix gives the point estimation for passing from one state to another and the mean is estimated via MLE. 
+
+(THIS PART IS NOT WELL WRITTEN)
+
+Taking into account the AIC and BIC values, we should take 5 states, but we obtain repeated states with the same most important weather (rain). That is why we select a more parsimonious and simpler model with 2 states.
+
+```{r}
+aic_vals <- c()
+bic_vals <- c()
+loglik_vals <- c()
+models <- list()
+
+for (k in 2:5) {
+  model_k <- depmix(
+    list(temp_max ~ 1, temp_min ~ 1, wind ~ 1, precipitation ~ 1),
+    data = df,
+    nstates = k,
+    family = list(gaussian(), gaussian(), gaussian(), gaussian())
+  )
+  fit_k <- fit(model_k, verbose = FALSE)
+  models[[k]] <- fit_k
+  
+  aic_vals[k] <- AIC(fit_k)
+  bic_vals[k] <- BIC(fit_k)
+  loglik_vals[k] <- logLik(fit_k)
+}
+
+data.frame(k = 2:5, AIC = aic_vals[2:5], BIC = bic_vals[2:5], LogLik = loglik_vals[2:5])
+
+```
+
+From the summary we can define general caracteristics of the two states:
+
+- State 1: negative precipitation mean, positive temperature range, so it is likely sunny/foggy.
+
+- State 2: high precipitation mean and low temp range, in this case is likely rainy.
+
+Now, we are going to plot them taking into account the weather and analyzing the stability over the time.
+
+```{r}
+set.seed(123)
+
+# Define HMM with 4 hidden states 
+hmm_model <- depmix(
+  list(temp_max ~ 1,
+       temp_min ~ 1,
+       wind ~ 1,
+       precipitation ~ 1,
+       temp_range ~ 1),
+  data = df,
+  nstates = 2,
+  family = list(gaussian(), gaussian(), gaussian(), gaussian(), gaussian())
+)
+
+# Fit the model
+hmm_fit <- fit(hmm_model, verbose = FALSE)
+
+# View model parameters
+summary(hmm_fit)
+
+# Predict hidden states
+df$state <- posterior(hmm_fit)$state
+
+# Compare with original weather labels
+table(Predicted = df$state, Actual = df$weather)
+
+# View a few results
+#head(df[, c("date", "weather", "state")], 10)
+```
+
+Based on the weather distribution between the states we can label them:
+
+- State 1: Dry weather (sunny, foggy)
+- State 2: Wet weather (rainy, snow)
+
+```{r}
+
+# # Plot predicted hidden states over time
+# ggplot(df, aes(x = date, y = state)) +
+#   geom_line(color = "steelblue") +
+#   labs(title = "Predicted Hidden States Over Time",
+#        x = "Date", y = "Hidden State") +
+#   theme_minimal()
+
+# Plot hidden states colored by actual weather
+ggplot(df, aes(x = date, y = state, color = weather)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Hidden States vs. Actual Weather Labels",
+       x = "Date", y = "Predicted Hidden State") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1")
+
+# Count of actual weather types per hidden state
+df %>%
+  count(state, weather) %>%
+  ggplot(aes(x = factor(state), y = n, fill = weather)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Distribution of Actual Weather by Hidden State",
+       x = "Hidden State", y = "Count") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")
+
+
+```
+
+# Bayesian Approach
+
+Samples from the posterior distribution of parameters using MCMC. This gives richer uncertainty information (e.g., credible intervals). In the bayesian approach the transition matrix  has the full posterior distribution for each cell and the mean is obtained as the posterior mean. 
+
+```{r}
+y <- as.numeric(df$precipitation) # standardize for numerical stability
+n <- length(y)
+k <- 2  # number of hidden states
+
+# Gaussian HMM - Bugs Model Function
+bugsHMM <- function(){
+  s[1] ~ dcat(P0[])
+  y[1] ~ dnorm(mu[s[1]], tau[s[1]])
+  
+  for (j in 2:n){
+    s[j] ~ dcat(P.mat[s[j-1],])
+    y[j] ~ dnorm(mu[s[j]], tau[s[j]])
+  }
+  
+  for(i in 1:k){
+    alpha[i] <- 1
+    P0[i] <- 1/k
+    P.mat[i,1:k] ~ ddirich(alpha[])
+    
+    mu[i] ~ dnorm(0, 0.01)
+    tau[i] ~ dgamma(0.001, 0.001)
+  }
+}
+
+# Data and Initial Values
+data <- list("k" = k, "n" = n, "y" = y)
+
+inits <- function() {
+  list(mu = rnorm(k), tau = rgamma(k, 1, 1))
+}
+
+params <- c("mu", "tau", "P.mat", "s")
+
+# Run the model
+res <- bugs(data, inits, parameters.to.save = params,
+            model.file = bugsHMM,
+            n.iter = 10000, n.burnin = 2000, n.chains = 3,
+            codaPkg = FALSE,
+            OpenBUGS.pgm = "C:/Program Files (x86)/OpenBUGS/OpenBUGS323/OpenBUGS.exe")
+
+# Posterior Analysis
+cc <- res$sims.list
+mu <- cc$mu
+plot(apply(mu, 2, mean), type = 'b', main = "Posterior Means for mu", ylab = "mu", xlab = "State")
+
+## Predicted states
+s <- cc$s
+ps <- matrix(0, nrow=n, ncol=k)
+maxstate <- rep(0, n)
+
+for (i in 1:n){
+  for (j in 1:k){
+    ps[i,j] <- sum(s[,i]==j)
+  }
+  maxstate[i] <- which.max(ps[i,])
+}
+df$state <- maxstate
+
+# Plot Results
+ggplot(df, aes(x = date, y = state, color = df$weather)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Bayesian HMM Hidden States vs Weather", y = "Hidden State") +
+  theme_minimal()
+  
+```
+
