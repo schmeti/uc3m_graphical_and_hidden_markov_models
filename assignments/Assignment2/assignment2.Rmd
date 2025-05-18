@@ -33,7 +33,7 @@ d) Try to fit the graph structure of the model using one or more of the differen
 
 e) Which of the proposed graphical structures is the best?
 
-e) Provide a brief summary of your results. 
+f) Provide a brief summary of your results. 
 
 # a) Introduction
 The following work on Bayesian Network was done as part of the Master in Statistics for Data Science at the Universidad Carlos III de Madrid and contains the design of a Graphical Bayesian Network model. The analysis was performed using the dataset titled "Weightlifting Injuries in Master Athletes" (https://zenodo.org/records/6679575), which comprises survey responses from 976 master weightlifters (aged 35–88, 51.1% female) across Australia, Canada, Europe, and the USA. Collected in June 2021, the data includes information on acute weightlifting-related injuries, chronic diseases, training practices, and sport history. Out a range of available variables, the following variables were extracted in the preprocessing of the data and then used for anaylsis: 
@@ -132,14 +132,22 @@ missing_combinations[1,]
 # Why a combination? there are 18 out of the 96 possibles
 ```
 
-and use that combination to perform a out of sample prediction for injury, yielding the following probability: 
+and use that combination to perform a out of sample prediction for injury, yielding the following conditional probability of sustaining a injury for a female of 60+ years, with little experience who warms up only one minute before training. 
 
 ```{r}
 # predict 
-cpquery(model_fit, (injury=="0"), (sex=="f" & agegrp3=="60+" & yrs_experience=="little" & train_warm  =="1"),n=1000000) # I am not sure what we are predicting, like that is the probability of what(?)
+cpquery(model_fit, (injury=="0"), (sex=="f" & agegrp3=="60+" & yrs_experience=="little" & train_warm  =="1"),n=1000000) 
+```
+
+compared to that, a male who is 35-44 years old, has little experience and warms up for 1 minute before training has a larger probability of sustaining a injury while weightlifting
+```{r}
+# predict 
+cpquery(model_fit, (injury=="1"), (sex=="m" & agegrp3=="35-44" & yrs_experience=="little" & train_warm  =="1"),n=1000000) 
 ```
 
 # d) Automatic Graph Design
+
+With the manual model design done, we continue with automatically designing a model using two approaches: A score-based method and a hybrid method.
 
 ## Scored Based Method
 
@@ -158,10 +166,6 @@ cpquery(model_fit, (injury=="0"), (sex=="f" & agegrp3=="60+" & yrs_experience=="
 scoredag<-hc(data)
 scoredag
 plot(scoredag)
-
-# [sex][yrs_experience|sex][injury|sex][coached|sex][agegrp3|coached][train_warm|coached] 
-# INITIAL IDEA:
-# [sex][agegrp3][yrs_experience|sex][train_warm|sex:yrs_experience:agegrp3][coached|sex:agegrp3][injury|train_warm:sex:coached]
 ```
 
 In general, as age and sex are characteristics proper of the weightlifters, it makes no sense that any of this two variables depend on any of the other nodes. For that reason a blacklist is created. Also, train warm is known to be really important to avoid injuries, that is why a white list is created with this relation.
@@ -204,9 +208,6 @@ whitelist <- data.frame(from = "train_warm", to = "injury", stringsAsFactors = F
 scoredag2 <- hc(data, blacklist = blacklist, whitelist = whitelist)
 plot(scoredag2)
 scoredag2
-
-# [sex][agegrp3][yrs_experience|sex][coached|sex:agegrp3][train_warm|coached][injury|sex:train_warm] 
-
 ```
 
 ## Hybrid Methods
@@ -219,9 +220,6 @@ With this method we obtain only 3 relations between the 6 possible variables, an
 hybriddag<-mmhc(data)
 hybriddag
 plot(hybriddag)
-
-# [sex][yrs_experience][train_warm][injury|sex][coached|sex][agegrp3|coached] 
-# [sex][agegrp3][yrs_experience|sex][train_warm|sex:yrs_experience:agegrp3][coached|sex:agegrp3][injury|train_warm:sex:coached]
 ```
 
 We include the same white and black lists that we use in the previous method. With this changes we obtain again a small number of relations:
@@ -237,10 +235,6 @@ Nothing else is connected.
 hybriddag2 <- mmhc(data, whitelist = whitelist, blacklist = blacklist)
 hybriddag2
 plot(hybriddag2)
-
-# hybriddag2$learning
-# hybriddag2$nodes
-# hybriddag2$arcs
 ```
 
 
@@ -262,5 +256,8 @@ results
 
 # f) Summary and Conclusions
 
+The in e) identified best model is in line with the main assumptions made in the initial manual model design like a dependence between sex and coaching, a overall dependence between sex and injury and a dependence between sex and years experience. Some of the assumptions however where not validated by the best automatic mode as for example the dependence between years of experience and injury. In general, most results fit well with the logical conclusion and are in line with what could be expected without the data. As shown in the previous section, the Score based model with restrictions is the best model would be recommended for practical application, delivering the best BIC score and a coherent model structure.
 
+
+The res
 
