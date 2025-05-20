@@ -169,7 +169,7 @@ df$state_true <- ifelse(df$weather %in% c("drizzle", "fog", "sun"), 1,
 conf_matrix_HMM <- table(Predicted = df$state_HMM, Actual = df$state_true)
 print(conf_matrix_HMM)
 
-accuracy_HMM <- sum(diag(conf_matrix)) / sum(conf_matrix)
+accuracy_HMM <- sum(diag(conf_matrix_HMM)) / sum(conf_matrix_HMM)
 accuracy_HMM
 
 ```
@@ -248,7 +248,7 @@ And then again score the resulting predictions, yielding a accuracy of XXXXXXXXX
 conf_matrix_HMM <- table(Predicted = df$state_bayesian, Actual = df$state_true)
 print(conf_matrix_HMM)
 
-accuracy_HMM <- sum(diag(conf_matrix)) / sum(conf_matrix)
+accuracy_HMM <- sum(diag(conf_matrix_HMM)) / sum(conf_matrix_HMM)
 accuracy_HMM
 
 ```
