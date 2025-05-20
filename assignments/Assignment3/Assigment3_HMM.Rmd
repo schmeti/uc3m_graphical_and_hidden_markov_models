@@ -180,7 +180,9 @@ An alternative to the Frequentist approach is the Bayesian approach to yield ric
 y <- as.numeric(df$precipitation) # standardize for numerical stability
 n <- length(y)
 k <- 2  # number of hidden states
+```
 
+```{r eval=FALSE}
 # Gaussian HMM - Bugs Model Function
 bugsHMM <- function(){
   s[1] ~ dcat(P0[])
@@ -217,6 +219,11 @@ res <- bugs(data, inits, parameters.to.save = params,
             codaPkg = FALSE,
             OpenBUGS.pgm = "C:/Program Files (x86)/OpenBUGS/OpenBUGS323/OpenBUGS.exe")
 
+res %>% saveRDS("BUGSmod.RDS")
+```
+
+```{r}
+res<-readRDS("BUGSmod.RDS")
 # Posterior Analysis
 cc <- res$sims.list
 mu <- cc$mu
