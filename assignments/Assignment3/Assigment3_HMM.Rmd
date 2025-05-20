@@ -124,8 +124,6 @@ df$state_HMM <- posterior(hmm_fit)$state
 # Compare with original weather labels
 table(Predicted = df$state_HMM, Actual = df$weather)
 
-# Compare with original weather labels
-table(Predicted = df$state_HMM, Actual = df$weather)
 ```
 
 These assumptions can be verified by plotting the predicted hidden states against the actual weather labels. There we see that our seperation of the states is indeed fitting.
@@ -171,7 +169,6 @@ print(conf_matrix_HMM)
 
 accuracy_HMM <- sum(diag(conf_matrix_HMM)) / sum(conf_matrix_HMM)
 accuracy_HMM
-
 ```
 # Bayesian Approach
 An alternative to the Frequentist approach is the Bayesian approach to yield richer uncertainty information (e.g., credible intervals). Here, we create a transition matrix using MCMC to obtain the posterior distribution of parameters, with the mean as the posterior mean. 
@@ -181,6 +178,8 @@ y <- as.numeric(df$precipitation) # standardize for numerical stability
 n <- length(y)
 k <- 2  # number of hidden states
 ```
+We begin by defining the model in OpenBUGS with like previously with two hidden states.
+
 
 ```{r eval=FALSE}
 # Gaussian HMM - Bugs Model Function
@@ -222,12 +221,14 @@ res <- bugs(data, inits, parameters.to.save = params,
 res %>% saveRDS("BUGSmod.RDS")
 ```
 
+And can then use the model to perform a posterior analysis, showing how the posterior means vary for both state, with state 1 showing a positive mean and state 2 a negative mean. 
+
 ```{r}
 res<-readRDS("BUGSmod.RDS")
 # Posterior Analysis
 cc <- res$sims.list
 mu <- cc$mu
-plot(apply(mu, 2, mean), type = 'b', main = "Posterior Means for mu", ylab = "mu", xlab = "State")
+plot(apply(mu, 2, mean), type = 'b',lty = 2 ,main = "Posterior Means for mu", ylab = "mu", xlab = "State")
 ```
 
 With the model set up and validated, we proceed to predicting the states.
@@ -242,25 +243,24 @@ for (i in 1:n){
   for (j in 1:k){
     ps[i,j] <- sum(s[,i]==j)
   }
-  maxstate[i] <- which.max(ps[i,])
+  maxstate[i] <- which.min(ps[i,])
 }
 df$state_bayesian <- maxstate
 ```
 
 
-And then again score the resulting predictions, yielding a accuracy of XXXXXXXXX
+And then again score the resulting predictions, yielding again a accuracy of 97%.
 
 ```{r}
 # score for Bayesian
-conf_matrix_HMM <- table(Predicted = df$state_bayesian, Actual = df$state_true)
-print(conf_matrix_HMM)
+conf_matrix_bayesian <- table(Predicted = df$state_bayesian, Actual = df$state_true)
+print(conf_matrix_bayesian)
 
-accuracy_HMM <- sum(diag(conf_matrix_HMM)) / sum(conf_matrix_HMM)
-accuracy_HMM
+accuracy_bayesian<- sum(diag(conf_matrix_bayesian)) / sum(conf_matrix_bayesian)
+accuracy_bayesian
 
 ```
 
-
 # Conclusion
 
-Comparing both the Frequentist HMM and the Bayesian HMM approach, we see the XXXX approach outperform the other. 
+Comparing both the Frequentist HMM and the Bayesian HMM approach, we see that both models yield the exact same accuracy of 97%, which is not surprising as both contain the same number of hidden states. However, the Bayesian approach only uses precipitation as input variable, while the Frequentist approach uses all four variables. The fact that both yield the same accuracy is a strong indicator that the other three variables are not very relevant for predicting the two chosen states. 
